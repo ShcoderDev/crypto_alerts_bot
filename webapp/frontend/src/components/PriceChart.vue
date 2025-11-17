@@ -209,7 +209,7 @@ function connectWebSocket() {
   const symbol = `${selectedCrypto.value.toLowerCase()}usdt`
   // Используем прокси через наш сервер вместо прямого подключения к Binance
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${protocol}//${window.location.host}/ws/binance/${symbol}@ticker`
+  const wsUrl = `${protocol}//${window.location.host}/ws/binance/${symbol}`
 
   try {
     ws = new WebSocket(wsUrl)
