@@ -42,21 +42,22 @@ sudo apt install git -y
 ## Шаг 2: Клонирование проекта
 
 ```bash
-# Создаем директорию для проекта
-sudo mkdir -p /var/www/miniapp
-sudo chown $USER:$USER /var/www/miniapp
+# Переходим в домашнюю директорию
+cd ~
 
-# Клонируем репозиторий (или загружаем файлы)
-cd /var/www/miniapp
-git clone <ваш-репозиторий> .  # или загрузите файлы через scp/sftp
+# Клонируем репозиторий
+git clone https://github.com/ShcoderDev/crypto_alerts_bot.git
+
+# Переходим в директорию проекта
+cd crypto_alerts_bot
 ```
 
 ## Шаг 3: Настройка Python окружения
 
 ```bash
-cd /var/www/miniapp
+cd ~/crypto_alerts_bot
 
-# Создаем виртуальное окружение
+# Создаем виртуальное окружение (если еще не создано)
 python3 -m venv .venv
 
 # Активируем окружение
@@ -69,7 +70,12 @@ pip install -r requirements.txt
 ## Шаг 4: Настройка переменных окружения
 
 ```bash
-# Создаем файл .env
+cd ~/crypto_alerts_bot
+
+# Копируем пример файла .env
+cp .env.example .env
+
+# Редактируем файл .env
 nano .env
 ```
 
@@ -85,9 +91,9 @@ MINIAPP_URL=https://ваш-домен.com
 ## Шаг 5: Сборка фронтенда
 
 ```bash
-cd /var/www/miniapp/webapp/frontend
+cd ~/crypto_alerts_bot/webapp/frontend
 
-# Устанавливаем зависимости
+# Устанавливаем зависимости (если еще не установлены)
 npm install
 
 # Собираем проект для продакшена
@@ -95,6 +101,8 @@ npm run build
 ```
 
 После сборки файлы будут в `webapp/frontend/dist/`
+
+**Примечание:** Если `dist` уже существует, пересоберите проект после обновления кода.
 
 ## Шаг 6: Настройка systemd сервисов
 
@@ -113,10 +121,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=www-data
-WorkingDirectory=/var/www/miniapp
-Environment="PATH=/var/www/miniapp/.venv/bin"
-ExecStart=/var/www/miniapp/.venv/bin/python /var/www/miniapp/start_bot.py
+User=root
+WorkingDirectory=/root/crypto_alerts_bot
+Environment="PATH=/root/crypto_alerts_bot/.venv/bin"
+ExecStart=/root/crypto_alerts_bot/.venv/bin/python /root/crypto_alerts_bot/start_bot.py
 Restart=always
 RestartSec=10
 
@@ -139,10 +147,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=www-data
-WorkingDirectory=/var/www/miniapp
-Environment="PATH=/var/www/miniapp/.venv/bin"
-ExecStart=/var/www/miniapp/.venv/bin/uvicorn webapp.backend.main:app --host 127.0.0.1 --port 8000
+User=root
+WorkingDirectory=/root/crypto_alerts_bot
+Environment="PATH=/root/crypto_alerts_bot/.venv/bin"
+ExecStart=/root/crypto_alerts_bot/.venv/bin/uvicorn webapp.backend.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=10
 
@@ -153,8 +161,8 @@ WantedBy=multi-user.target
 ### Установка прав доступа
 
 ```bash
-sudo chown -R www-data:www-data /var/www/miniapp
-sudo chmod -R 755 /var/www/miniapp
+# Убедитесь, что у вас есть права на запись в директорию проекта
+chmod -R 755 ~/crypto_alerts_bot
 ```
 
 ### Запуск сервисов
@@ -226,14 +234,14 @@ server {
 
     # Статические файлы фронтенда
     location / {
-        root /var/www/miniapp/webapp/frontend/dist;
+        root /root/crypto_alerts_bot/webapp/frontend/dist;
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "public, max-age=3600";
     }
 
     # Кеширование статических ресурсов
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        root /var/www/miniapp/webapp/frontend/dist;
+        root /root/crypto_alerts_bot/webapp/frontend/dist;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -331,19 +339,22 @@ curl https://ваш-домен.com/api/cryptocurrencies
 При обновлении кода:
 
 ```bash
-cd /var/www/miniapp
+cd ~/crypto_alerts_bot
 
-# Обновляем код (если используете git)
+# Активируем виртуальное окружение
+source .venv/bin/activate
+
+# Обновляем код из репозитория
 git pull
 
 # Обновляем Python зависимости (если изменились)
-source .venv/bin/activate
 pip install -r requirements.txt
 
 # Пересобираем фронтенд (если изменился)
 cd webapp/frontend
 npm install
 npm run build
+cd ../..
 
 # Перезапускаем сервисы
 sudo systemctl restart crypto-alerts-bot.service
@@ -396,12 +407,12 @@ sudo nano /usr/local/bin/backup-crypto-alerts.sh
 
 ```bash
 #!/bin/bash
-BACKUP_DIR="/var/backups/crypto-alerts"
+BACKUP_DIR="/root/backups/crypto-alerts"
 DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 
 # Бэкап базы данных
-cp /var/www/miniapp/database.db $BACKUP_DIR/database_$DATE.db
+cp /root/crypto_alerts_bot/database.db $BACKUP_DIR/database_$DATE.db
 
 # Удаляем старые бэкапы (старше 7 дней)
 find $BACKUP_DIR -name "database_*.db" -mtime +7 -delete
@@ -457,8 +468,8 @@ sudo crontab -e
 
 ### База данных не создается
 
-1. Проверьте права доступа: `ls -la /var/www/miniapp/database.db`
-2. Убедитесь, что директория доступна для записи
+1. Проверьте права доступа: `ls -la ~/crypto_alerts_bot/database.db`
+2. Убедитесь, что директория доступна для записи: `ls -la ~/crypto_alerts_bot/`
 3. Проверьте логи на ошибки создания БД
 
 ## Дополнительные настройки
