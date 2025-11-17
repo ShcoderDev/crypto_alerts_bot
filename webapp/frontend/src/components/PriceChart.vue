@@ -207,7 +207,9 @@ function connectWebSocket() {
   if (!selectedCrypto.value) return
 
   const symbol = `${selectedCrypto.value.toLowerCase()}usdt`
-  const wsUrl = `wss://stream.binance.com:9443/ws/${symbol}@ticker`
+  // Используем прокси через наш сервер вместо прямого подключения к Binance
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${protocol}//${window.location.host}/ws/binance/${symbol}@ticker`
 
   try {
     ws = new WebSocket(wsUrl)

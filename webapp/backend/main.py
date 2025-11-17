@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -6,6 +6,9 @@ from pydantic import BaseModel
 from typing import List, Optional
 import os
 import httpx
+import asyncio
+import websockets
+import json
 
 from webapp.backend.database import Database
 from bot.config import CRYPTOCURRENCIES
@@ -201,6 +204,57 @@ async def delete_alert(alert_id: int, user_id: int):
         raise HTTPException(status_code=500, detail="Ошибка при удалении алерта")
     
     return {"message": "Алерт успешно удален"}
+
+
+@app.websocket("/ws/binance/{symbol}")
+async def websocket_binance_proxy(websocket: WebSocket, symbol: str):
+    """Прокси для Binance WebSocket"""
+    await websocket.accept()
+    
+    # Формируем URL для Binance WebSocket
+    binance_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@ticker"
+    
+    binance_ws = None
+    try:
+        # Подключаемся к Binance WebSocket
+        binance_ws = await websockets.connect(binance_url)
+        
+        # Задача для пересылки данных от Binance к клиенту
+        async def forward_binance_to_client():
+            try:
+                async for message in binance_ws:
+                    await websocket.send_text(message)
+            except Exception as e:
+                print(f"Ошибка пересылки от Binance: {e}")
+        
+        # Задача для обработки отключения клиента
+        async def handle_client_disconnect():
+            try:
+                while True:
+                    try:
+                        data = await websocket.receive_text()
+                        # Если нужно, можно пересылать данные клиента к Binance
+                        # await binance_ws.send(data)
+                    except WebSocketDisconnect:
+                        break
+            except Exception as e:
+                print(f"Ошибка обработки клиента: {e}")
+        
+        # Запускаем обе задачи
+        await asyncio.gather(
+            forward_binance_to_client(),
+            handle_client_disconnect(),
+            return_exceptions=True
+        )
+    except Exception as e:
+        print(f"Ошибка WebSocket прокси: {e}")
+    finally:
+        if binance_ws:
+            await binance_ws.close()
+        try:
+            await websocket.close()
+        except:
+            pass
 
 
 # Статические файлы для фронтенда
