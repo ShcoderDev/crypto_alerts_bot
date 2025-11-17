@@ -206,25 +206,35 @@ async function loadHistoricalData() {
 function connectWebSocket() {
   if (!selectedCrypto.value) return
 
+  // Закрываем предыдущее соединение, если оно есть
+  if (ws) {
+    ws.close()
+    ws = null
+  }
+
   const symbol = `${selectedCrypto.value.toLowerCase()}usdt`
   // Используем прокси через наш сервер вместо прямого подключения к Binance
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const wsUrl = `${protocol}//${window.location.host}/ws/binance/${symbol}`
+  
+  console.log('Подключение к WebSocket:', wsUrl)
 
   try {
     ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
-      console.log('WebSocket подключен для', symbol)
+      console.log('✅ WebSocket подключен для', symbol)
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
+        console.log('📨 Получены данные от WebSocket:', data)
+        
         const price = parseFloat(data.c)
         
         if (isNaN(price) || price <= 0) {
-          console.warn('Некорректная цена:', data.c)
+          console.warn('⚠️ Некорректная цена:', data.c, 'Полные данные:', data)
           return
         }
 
@@ -266,25 +276,31 @@ function connectWebSocket() {
           candlestickSeries.update(newCandle)
         }
       } catch (error) {
-        console.error('Ошибка обработки WebSocket данных:', error)
+        console.error('❌ Ошибка обработки WebSocket данных:', error, 'Данные:', event.data)
       }
     }
 
     ws.onerror = (error) => {
-      console.error('WebSocket ошибка:', error)
+      console.error('❌ WebSocket ошибка:', error)
     }
 
-    ws.onclose = () => {
-      console.log('WebSocket закрыт, переподключение...')
-      // Переподключение через 3 секунды
-      setTimeout(() => {
-        if (selectedCrypto.value && !ws) {
-          connectWebSocket()
-        }
-      }, 3000)
+    ws.onclose = (event) => {
+      console.log('🔌 WebSocket закрыт:', event.code, event.reason)
+      ws = null
+      
+      // Переподключение через 3 секунды, если криптовалюта еще выбрана
+      if (selectedCrypto.value) {
+        console.log('🔄 Переподключение через 3 секунды...')
+        setTimeout(() => {
+          if (selectedCrypto.value) {
+            connectWebSocket()
+          }
+        }, 3000)
+      }
     }
   } catch (error) {
-    console.error('Ошибка создания WebSocket:', error)
+    console.error('❌ Ошибка создания WebSocket:', error)
+    ws = null
   }
 }
 </script>

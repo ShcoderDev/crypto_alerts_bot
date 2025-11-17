@@ -210,35 +210,62 @@ async def delete_alert(alert_id: int, user_id: int):
 async def websocket_binance_proxy(websocket: WebSocket, symbol: str):
     """Прокси для Binance WebSocket"""
     await websocket.accept()
+    print(f"WebSocket клиент подключен для символа: {symbol}")
     
     # Формируем URL для Binance WebSocket
     binance_url = f"wss://stream.binance.com:9443/ws/{symbol.lower()}@ticker"
+    print(f"Подключение к Binance: {binance_url}")
     
     binance_ws = None
+    client_connected = True
+    
     try:
         # Подключаемся к Binance WebSocket
         binance_ws = await websockets.connect(binance_url)
+        print(f"Подключено к Binance WebSocket для {symbol}")
         
         # Задача для пересылки данных от Binance к клиенту
         async def forward_binance_to_client():
+            nonlocal client_connected
             try:
                 async for message in binance_ws:
-                    await websocket.send_text(message)
+                    if not client_connected:
+                        break
+                    try:
+                        await websocket.send_text(message)
+                    except Exception as e:
+                        print(f"Ошибка отправки данных клиенту: {e}")
+                        client_connected = False
+                        break
+            except websockets.exceptions.ConnectionClosed:
+                print(f"Соединение с Binance закрыто для {symbol}")
             except Exception as e:
                 print(f"Ошибка пересылки от Binance: {e}")
+                client_connected = False
         
         # Задача для обработки отключения клиента
         async def handle_client_disconnect():
+            nonlocal client_connected
             try:
-                while True:
+                while client_connected:
                     try:
-                        data = await websocket.receive_text()
-                        # Если нужно, можно пересылать данные клиента к Binance
-                        # await binance_ws.send(data)
+                        # Ждем сообщения от клиента или отключения
+                        data = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                        # Клиент может отправлять ping/pong сообщения
+                    except asyncio.TimeoutError:
+                        # Проверяем, что соединение еще активно
+                        continue
                     except WebSocketDisconnect:
+                        print(f"Клиент отключился для {symbol}")
+                        client_connected = False
+                        break
+                    except Exception as e:
+                        print(f"Ошибка обработки клиента: {e}")
+                        client_connected = False
                         break
             except Exception as e:
-                print(f"Ошибка обработки клиента: {e}")
+                print(f"Ошибка в handle_client_disconnect: {e}")
+                client_connected = False
         
         # Запускаем обе задачи
         await asyncio.gather(
@@ -247,12 +274,20 @@ async def websocket_binance_proxy(websocket: WebSocket, symbol: str):
             return_exceptions=True
         )
     except Exception as e:
-        print(f"Ошибка WebSocket прокси: {e}")
+        print(f"Ошибка WebSocket прокси для {symbol}: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
+        client_connected = False
         if binance_ws:
-            await binance_ws.close()
+            try:
+                await binance_ws.close()
+                print(f"Соединение с Binance закрыто для {symbol}")
+            except:
+                pass
         try:
             await websocket.close()
+            print(f"WebSocket клиент отключен для {symbol}")
         except:
             pass
 
